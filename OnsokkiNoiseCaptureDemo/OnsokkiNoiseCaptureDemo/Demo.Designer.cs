@@ -1,4 +1,6 @@
-﻿namespace OnsokkiNoiseCaptureDemo
+﻿using System;
+
+namespace OnsokkiNoiseCaptureDemo
 {
     partial class Demo
     {
@@ -212,7 +214,7 @@
             this.btnPreprocess.TabIndex = 275;
             this.btnPreprocess.Text = "preprocess data";
             this.btnPreprocess.UseVisualStyleBackColor = true;
-            //this.btnPreprocess.Click += new System.EventHandler(this.btnPreprocess_Click);
+            this.btnPreprocess.Click += new EventHandler(this.btn_preprocess_Click);
             // 
             // Demo
             // 

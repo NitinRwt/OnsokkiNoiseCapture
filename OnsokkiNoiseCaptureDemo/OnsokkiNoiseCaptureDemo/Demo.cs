@@ -1,18 +1,21 @@
-﻿using System;
+﻿using FAPL_HW_Driver;
+using iTextSharp.text;
+using iTextSharp.text.pdf;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
-using System.IO;
-using System.Globalization;
-using System.Diagnostics;
-
-using FAPL_HW_Driver;
+using ITextFont = iTextSharp.text.Font;
+using ITextBaseColor = iTextSharp.text.BaseColor;
 
 namespace OnsokkiNoiseCaptureDemo
 {
@@ -29,7 +32,7 @@ namespace OnsokkiNoiseCaptureDemo
             StartConsoleApp();
             InitializeTestDataTable();
             LoadTestCounter();
-            AddPreprocessButton();
+
         }
 
         public static string onsokkiFilePath = @"C:\FAPLData\OnsokkiData";
@@ -39,7 +42,162 @@ namespace OnsokkiNoiseCaptureDemo
 
         FAPL_Debug_FileWrite debugFile;
         public const ushort SW_VER = 1;
+        private void btn_preprocess_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string latestCsv = GetLatestCSVFile(destinationDirectory);
+                if (latestCsv == null)
+                {
+                    update_debug_message("No CSV file found for preprocessing.");
+                    MessageBox.Show("No CSV files found in destination directory.", "Preprocessing Error",
+                                   MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
 
+                // Read CSV content
+                var lines = File.ReadAllLines(latestCsv).ToList();
+
+                // Find the frequency data section
+                int frequencyHeaderIndex = lines.FindIndex(line => line.Contains("Frequency") && line.Contains("Ave."));
+
+                if (frequencyHeaderIndex < 0)
+                {
+                    update_debug_message("Could not find frequency header in CSV.");
+                    MessageBox.Show("CSV file doesn't contain frequency data.", "Preprocessing Error",
+                                   MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Process frequency values (skip header row)
+                var ch1Values = new List<double>();
+                var ch2Values = new List<double>();
+
+                for (int i = frequencyHeaderIndex + 1; i < lines.Count && ch1Values.Count < 5; i++)
+                {
+                    string[] parts = lines[i].Split(',');
+
+                    if (parts.Length >= 3 &&
+                        double.TryParse(parts[1], out double ch1Value) &&
+                        double.TryParse(parts[2], out double ch2Value))
+                    {
+                        ch1Values.Add(ch1Value);
+                        ch2Values.Add(ch2Value);
+                        update_debug_message($"Frequency: {parts[0]}, CH1: {ch1Value}, CH2: {ch2Value}");
+                    }
+                }
+
+                if (ch1Values.Count == 0)
+                {
+                    update_debug_message("No valid frequency data found.");
+                    MessageBox.Show("No valid frequency data found in CSV.", "Preprocessing Error",
+                                   MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Calculate averages
+                double ch1Average = Math.Round(ch1Values.Average(), 2);
+                double ch2Average = Math.Round(ch2Values.Average(), 2);
+
+                // Add results to the CSV
+                lines.Add("");
+                lines.Add("Preprocessing Results");
+                lines.Add($"CH_001-P. Ave. Average (First {ch1Values.Count} values),{ch1Average}");
+                lines.Add($"CH_002-P. Ave. Average (First {ch2Values.Count} values),{ch2Average}");
+
+                // Save updated CSV
+                string processedCsv = Path.Combine(
+                    Path.GetDirectoryName(latestCsv),
+                    Path.GetFileNameWithoutExtension(latestCsv) + "_processed.csv"
+                );
+                File.WriteAllLines(processedCsv, lines);
+
+                // Generate PDF for the processed CSV
+                GenerateSimplePDF(processedCsv, ch1Average, ch2Average);
+
+                update_debug_message($"Preprocessing complete. CH1 Avg: {ch1Average}, CH2 Avg: {ch2Average}");
+                MessageBox.Show($"Preprocessing complete!\n\nCH_001-P. Ave. Average: {ch1Average}\nCH_002-P. Ave. Average: {ch2Average}",
+                               "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                update_debug_message($"Preprocessing error: {ex.Message}");
+                MessageBox.Show($"Error during preprocessing: {ex.Message}", "Error",
+                               MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+        private void GenerateSimplePDF(string csvPath, double ch1Average, double ch2Average)
+        {
+            string pdfPath = Path.ChangeExtension(csvPath, ".pdf");
+
+            try
+            {
+                // Ensure directory exists
+                Directory.CreateDirectory(Path.GetDirectoryName(pdfPath));
+
+                using (FileStream fs = new FileStream(pdfPath, FileMode.Create))
+                {
+                    Document doc = new Document(PageSize.A4, 50, 50, 50, 50);
+                    PdfWriter writer = PdfWriter.GetInstance(doc, fs);
+                    doc.Open();
+
+                    // Add title
+                    var titleFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 16);
+                    var headerFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 12);
+                    var normalFont = FontFactory.GetFont(FontFactory.HELVETICA, 10);
+
+                    Paragraph title = new Paragraph("Frequency Data Analysis", titleFont);
+                    title.Alignment = Element.ALIGN_CENTER;
+                    title.SpacingAfter = 20f;
+                    doc.Add(title);
+
+                    // Add analysis results
+                    Paragraph results = new Paragraph("Analysis Results:", headerFont);
+                    results.SpacingAfter = 10f;
+                    doc.Add(results);
+
+                    PdfPTable table = new PdfPTable(2);
+                    table.WidthPercentage = 80;
+                    table.HorizontalAlignment = Element.ALIGN_CENTER;
+                    table.SpacingAfter = 20f;
+
+                    // Add table headers
+                    table.AddCell(new Phrase("Channel", headerFont));
+                    table.AddCell(new Phrase("Average Value", headerFont));
+
+                    // Add data
+                    table.AddCell(new Phrase("CH_001-P. Ave.", normalFont));
+                    table.AddCell(new Phrase(ch1Average.ToString("F2"), normalFont));
+
+                    table.AddCell(new Phrase("CH_002-P. Ave.", normalFont));
+                    table.AddCell(new Phrase(ch2Average.ToString("F2"), normalFont));
+
+                    doc.Add(table);
+
+                    // Add CSV data
+                    Paragraph csvHeader = new Paragraph("CSV Data (First 10 Rows):", headerFont);
+                    csvHeader.SpacingBefore = 10f;
+                    csvHeader.SpacingAfter = 10f;
+                    doc.Add(csvHeader);
+
+                    string[] csvLines = File.ReadAllLines(csvPath);
+                    int lineCount = Math.Min(csvLines.Length, 11); // Header + 10 rows
+
+                    for (int i = 0; i < lineCount; i++)
+                    {
+                        Paragraph line = new Paragraph(csvLines[i], normalFont);
+                        doc.Add(line);
+                    }
+
+                    doc.Close();
+                    update_debug_message($"Generated PDF: {pdfPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                update_debug_message($"Error generating PDF: {ex.Message}");
+            }
+        }
         private void LoadTestCounter()
         {
             try
@@ -259,24 +417,6 @@ namespace OnsokkiNoiseCaptureDemo
                 update_debug_message("Exception:" + exp.Message);
             }
         }
-        private void GenerateSimplePDF(string csvPath, string pdfPath)
-        {
-            try
-            {
-                var lines = File.ReadAllLines(csvPath);
-                using (var writer = new StreamWriter(pdfPath))
-                {
-                    writer.WriteLine("Processed Report PDF View");
-                    writer.WriteLine(new string('=', 30));
-                    foreach (var line in lines)
-                        writer.WriteLine(line);
-                }
-            }
-            catch (Exception ex)
-            {
-                update_debug_message("Failed to generate PDF: " + ex.Message);
-            }
-        }
 
         private void GenerateReportWithTable(string fileName, double maxNoise, double avgNoise)
         {
@@ -398,15 +538,34 @@ namespace OnsokkiNoiseCaptureDemo
 
         private string GetLatestCSVFile(string directory)
         {
-            if (!Directory.Exists(directory)) return null;
-            var files = new DirectoryInfo(directory).GetFiles("*.csv");
-            if (files.Length == 0) return null;
-            return files.OrderByDescending(f => f.LastWriteTime).First().FullName;
-        }
+            try
+            {
+                if (!Directory.Exists(directory))
+                {
+                    update_debug_message($"Directory does not exist: {directory}");
+                    return null;
+                }
 
-        public void update_debug_message(string message)
-        {
-            debugFile.logDebug(message);
+                DirectoryInfo dirInfo = new DirectoryInfo(directory);
+                FileInfo[] csvFiles = dirInfo.GetFiles("*.csv");
+
+                if (csvFiles.Length == 0)
+                {
+                    update_debug_message($"No CSV files found in directory: {directory}");
+                    return null;
+                }
+
+                // Sort by last write time (most recent first)
+                FileInfo latestFile = csvFiles.OrderByDescending(f => f.LastWriteTime).First();
+
+                update_debug_message($"Latest CSV file found: {latestFile.Name} - {latestFile.LastWriteTime}");
+                return latestFile.FullName;
+            }
+            catch (Exception ex)
+            {
+                update_debug_message($"Error getting latest CSV file: {ex.Message}");
+                return null;
+            }
         }
 
         private void WriteGraphData(StreamWriter writer)
@@ -462,214 +621,57 @@ namespace OnsokkiNoiseCaptureDemo
         {
             try
             {
-                // Method 1: Try using built-in Print functionality to create PDF
-                if (TryGeneratePDFWithPrint(pdfPath, csvPath, maxNoise, avgNoise))
+                Directory.CreateDirectory(Path.GetDirectoryName(pdfPath));
+                using (FileStream fs = new FileStream(pdfPath, FileMode.Create))
+                using (Document doc = new Document(PageSize.A4, 50, 50, 50, 50)) 
                 {
-                    update_debug_message("PDF generated successfully using Print method");
-                    return;
-                }
+                    PdfWriter writer = PdfWriter.GetInstance(doc, fs);
+                    doc.Open();
 
-                // Method 2: Create HTML and try to convert to PDF using WebBrowser control
-                if (TryGeneratePDFWithWebBrowser(pdfPath, csvPath, maxNoise, avgNoise))
-                {
-                    update_debug_message("PDF generated successfully using WebBrowser method");
-                    return;
-                }
+                    // Title
+                    var titleFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 16);
+                    var normal = FontFactory.GetFont(FontFactory.HELVETICA, 12);
+                    doc.Add(new Paragraph("DAIKIN", titleFont));
+                    doc.Add(new Paragraph("Test Data (Anechoic Chamber)", titleFont));
+                    doc.Add(new Paragraph("\n"));
 
-                // Method 3: Fallback - Create a proper formatted text file with PDF extension
-                CreateFormattedPDFFile(pdfPath, csvPath, maxNoise, avgNoise);
-                update_debug_message("PDF created as formatted text file");
-
-            }
-            catch (Exception ex)
-            {
-                update_debug_message($"Error generating PDF: {ex.Message}");
-                CreateFormattedPDFFile(pdfPath, csvPath, maxNoise, avgNoise);
-            }
-        }
-
-        private bool TryGeneratePDFWithPrint(string pdfPath, string csvPath, double maxNoise, double avgNoise)
-        {
-            try
-            {
-                // Create a rich text document
-                using (var rtb = new RichTextBox())
-                {
-                    StringBuilder content = new StringBuilder();
-                    content.AppendLine("DAIKIN");
-                    content.AppendLine("Test Data (Anechoic Chamber)");
-                    content.AppendLine(new string('=', 80));
-                    content.AppendLine();
-
-                    // Add test parameters
-                    content.AppendLine("TEST PARAMETERS:");
-                    content.AppendLine(new string('-', 80));
-
+                    // Test parameters (from DataGridView)
+                    doc.Add(new Paragraph("TEST PARAMETERS:", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 14)));
                     foreach (DataGridViewRow row in dgv_test_data.Rows)
                     {
                         if (!row.IsNewRow)
                         {
-                            string parameter = row.Cells["Parameter"].Value?.ToString() ?? "";
-                            string value = row.Cells["Value"].Value?.ToString() ?? "";
-                            content.AppendLine($"{parameter}: {value}");
+                            string p = row.Cells["Parameter"].Value?.ToString() ?? "";
+                            string v = row.Cells["Value"].Value?.ToString() ?? "";
+                            doc.Add(new Paragraph($"{p}: {v}", normal));
                         }
                     }
+                    doc.Add(new Paragraph("\n"));
 
-                    content.AppendLine();
-                    content.AppendLine("NOISE ANALYSIS RESULTS:");
-                    content.AppendLine(new string('-', 80));
-                    content.AppendLine($"Maximum Noise Level: {Math.Round(maxNoise, 2)} dB(A)");
-                    content.AppendLine($"Average Noise Level: {Math.Round(avgNoise, 2)} dB(A)");
-                    content.AppendLine($"Report Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                    // Analysis
+                    doc.Add(new Paragraph("NOISE ANALYSIS RESULTS:", FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 14)));
+                    doc.Add(new Paragraph($"Maximum Noise Level: {Math.Round(maxNoise, 2)} dB(A)", normal));
+                    doc.Add(new Paragraph($"Average Noise Level: {Math.Round(avgNoise, 2)} dB(A)", normal));
+                    doc.Add(new Paragraph($"Report Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}", normal));
 
-                    // Add raw data
-                    string latestRawFile = GetLatestCSVFile(rawDataDirectory);
-                    if (!string.IsNullOrEmpty(latestRawFile))
-                    {
-                        content.AppendLine();
-                        content.AppendLine($"RAW DATA ({Path.GetFileName(latestRawFile)}):");
-                        content.AppendLine(new string('-', 80));
-                        string[] rawLines = File.ReadAllLines(latestRawFile);
-                        foreach (string line in rawLines.Take(50)) // Limit to first 50 lines
-                        {
-                            content.AppendLine(line);
-                        }
-                    }
-
-                    rtb.Text = content.ToString();
-
-                    // Save as RTF first, then try to convert
-                    string rtfPath = Path.ChangeExtension(pdfPath, ".rtf");
-                    rtb.SaveFile(rtfPath, RichTextBoxStreamType.RichText);
-
-                    // Copy RTF to PDF location with PDF extension
-                    File.Copy(rtfPath, pdfPath, true);
-                    File.Delete(rtfPath);
-
-                    return true;
+                    // doc.Close() is handled by the using statement
                 }
+                update_debug_message("PDF generated successfully: " + pdfPath);
             }
-            catch
+            catch (Exception ex)
             {
-                return false;
+                update_debug_message("PDF generation error: " + ex.Message);
             }
         }
-
-        private bool TryGeneratePDFWithWebBrowser(string pdfPath, string csvPath, double maxNoise, double avgNoise)
+        public void update_debug_message(string message)
         {
-            try
-            {
-                // Create HTML content
-                StringBuilder htmlContent = new StringBuilder();
-                htmlContent.AppendLine("<html><head>");
-                htmlContent.AppendLine("<style>");
-                htmlContent.AppendLine("body { font-family: Arial, sans-serif; margin: 20px; font-size: 12px; }");
-                htmlContent.AppendLine("h1 { color: #0066cc; text-align: center; margin: 10px 0; }");
-                htmlContent.AppendLine("h2 { color: #0066cc; border-bottom: 2px solid #0066cc; margin: 15px 0 10px 0; }");
-                htmlContent.AppendLine("table { border-collapse: collapse; width: 100%; margin: 10px 0; }");
-                htmlContent.AppendLine("th, td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 11px; }");
-                htmlContent.AppendLine("th { background-color: #f2f2f2; font-weight: bold; }");
-                htmlContent.AppendLine(".header-table { background-color: #e6f2ff; }");
-                htmlContent.AppendLine(".analysis-table { background-color: #fff2e6; }");
-                htmlContent.AppendLine("</style>");
-                htmlContent.AppendLine("</head><body>");
-
-                htmlContent.AppendLine("<h1>DAIKIN</h1>");
-                htmlContent.AppendLine("<h1>Test Data (Anechoic Chamber)</h1>");
-
-                // Test Parameters Table
-                htmlContent.AppendLine("<h2>Test Parameters</h2>");
-                htmlContent.AppendLine("<table class='header-table'>");
-                htmlContent.AppendLine("<tr><th>Parameter</th><th>Value</th></tr>");
-
-                foreach (DataGridViewRow row in dgv_test_data.Rows)
-                {
-                    if (!row.IsNewRow)
-                    {
-                        string parameter = row.Cells["Parameter"].Value?.ToString() ?? "";
-                        string value = row.Cells["Value"].Value?.ToString() ?? "";
-                        htmlContent.AppendLine($"<tr><td>{parameter}</td><td>{value}</td></tr>");
-                    }
-                }
-
-                htmlContent.AppendLine("</table>");
-
-                // Analysis Results
-                htmlContent.AppendLine("<h2>Noise Analysis Results</h2>");
-                htmlContent.AppendLine("<table class='analysis-table'>");
-                htmlContent.AppendLine($"<tr><td><strong>Maximum Noise Level</strong></td><td>{Math.Round(maxNoise, 2)} dB(A)</td></tr>");
-                htmlContent.AppendLine($"<tr><td><strong>Average Noise Level</strong></td><td>{Math.Round(avgNoise, 2)} dB(A)</td></tr>");
-                htmlContent.AppendLine($"<tr><td><strong>Report Generated</strong></td><td>{DateTime.Now:yyyy-MM-dd HH:mm:ss}</td></tr>");
-                htmlContent.AppendLine("</table>");
-
-                htmlContent.AppendLine("</body></html>");
-
-                // Save HTML file with PDF extension
-                File.WriteAllText(pdfPath, htmlContent.ToString());
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
+            debugFile.logDebug(message);
         }
 
-        private void CreateFormattedPDFFile(string pdfPath, string csvPath, double maxNoise, double avgNoise)
-        {
-            using (StreamWriter writer = new StreamWriter(pdfPath))
-            {
-                writer.WriteLine("%PDF-1.4");
-                writer.WriteLine("% Simple PDF-like format");
-                writer.WriteLine();
-                writer.WriteLine("DAIKIN");
-                writer.WriteLine("Test Data (Anechoic Chamber)");
-                writer.WriteLine(new string('=', 100));
-                writer.WriteLine();
-
-                writer.WriteLine("TEST PARAMETERS:");
-                writer.WriteLine(new string('-', 100));
-
-                foreach (DataGridViewRow row in dgv_test_data.Rows)
-                {
-                    if (!row.IsNewRow)
-                    {
-                        string parameter = row.Cells["Parameter"].Value?.ToString() ?? "";
-                        string value = row.Cells["Value"].Value?.ToString() ?? "";
-                        writer.WriteLine($"{parameter,-50}: {value}");
-                    }
-                }
-
-                writer.WriteLine();
-                writer.WriteLine("NOISE ANALYSIS RESULTS:");
-                writer.WriteLine(new string('-', 100));
-                writer.WriteLine($"Maximum Noise Level: {Math.Round(maxNoise, 2)} dB(A)");
-                writer.WriteLine($"Average Noise Level: {Math.Round(avgNoise, 2)} dB(A)");
-                writer.WriteLine($"Report Generated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-                writer.WriteLine();
-
-                // Add latest raw data
-                string latestRawFile = GetLatestCSVFile(rawDataDirectory);
-                if (!string.IsNullOrEmpty(latestRawFile))
-                {
-                    writer.WriteLine($"RAW DATA ({Path.GetFileName(latestRawFile)}):");
-                    writer.WriteLine(new string('-', 100));
-                    string[] rawLines = File.ReadAllLines(latestRawFile);
-                    foreach (string line in rawLines)
-                    {
-                        writer.WriteLine(line);
-                    }
-                }
-                else
-                {
-                    writer.WriteLine("RAW DATA: No files found in raw directory");
-                }
-            }
-        }
         private void Demo_Load(object sender, EventArgs e)
         {
-            // Add initialization logic here if needed
-            InitializeTestDataTable();
-            LoadTestCounter();
+            debugFile = new FAPL_Debug_FileWrite();
+            update_debug_message("SW version:" + SW_VER);
         }
 
         public (List<double> ch1timeList, List<double> ch1List,
@@ -742,87 +744,5 @@ namespace OnsokkiNoiseCaptureDemo
             // Example: Show a message box or perform any action you want
             MessageBox.Show("Test Parameters label clicked.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
-    
-        private Button btn_preprocess;
-
-        private void AddPreprocessButton()
-        {
-            btn_preprocess = new Button();
-            btn_preprocess.Text = "Preprocess Data";
-            btn_preprocess.Size = new Size(140, 40);
-            btn_preprocess.Location = new Point(850, 100); // Adjust as needed
-            btn_preprocess.Click += new EventHandler(btn_preprocess_Click);
-            this.Controls.Add(btn_preprocess);
-        }
-        private void btn_preprocess_Click(object sender, EventArgs e)
-        {
-            string latestCSV = GetLatestCSVFile(destinationDirectory);
-            if (string.IsNullOrEmpty(latestCSV))
-            {
-                MessageBox.Show("No CSV found in final_report folder.");
-                return;
-            }
-
-            string[] lines;
-            try
-            {
-                lines = File.ReadAllLines(latestCSV);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error reading CSV: {ex.Message}");
-                return;
-            }
-
-            if (lines.Length < 2)
-            {
-                MessageBox.Show("CSV has no data rows.");
-                return;
-            }
-
-            string[] headers = lines[0].Split(',');
-            var dataRows = lines.Skip(1)
-                                .Where(l => !string.IsNullOrWhiteSpace(l))
-                                .Select(l => l.Split(','))
-                                .ToList();
-
-            int freqCols = Math.Min(5, headers.Length);
-            double[] sums = new double[freqCols];
-            int rowCount = dataRows.Count;
-
-            foreach (var row in dataRows)
-            {
-                for (int i = 0; i < freqCols; i++)
-                {
-                    if (double.TryParse(row[i], out double val))
-                        sums[i] += val;
-                }
-            }
-
-            if (rowCount == 0)
-            {
-                MessageBox.Show("No data to process.");
-                return;
-            }
-
-            double[] avgs = sums.Select(sum => sum / rowCount).ToArray();
-            string newRow = string.Join(",", avgs.Select(a => a.ToString("F2")));
-
-            var updatedLines = new List<string> { lines[0] };
-            updatedLines.AddRange(lines.Skip(1));
-            updatedLines.Add(newRow);
-
-            string processedDir = Path.Combine(destinationDirectory, "processed_report");
-            Directory.CreateDirectory(processedDir);
-
-            string updatedCSVPath = Path.Combine(processedDir, "Processed_" + Path.GetFileName(latestCSV));
-            File.WriteAllLines(updatedCSVPath, updatedLines);
-
-            string pdfPath = Path.ChangeExtension(updatedCSVPath, ".pdf");
-            GenerateSimplePDF(updatedCSVPath, pdfPath);
-
-            MessageBox.Show($"Data preprocessed and saved:\nCSV: {updatedCSVPath}\nPDF: {pdfPath}");
-        }
-
     }
 }
