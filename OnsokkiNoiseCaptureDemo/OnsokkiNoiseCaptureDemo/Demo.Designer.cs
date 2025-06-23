@@ -28,9 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea6 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend6 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series6 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend2 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.btn_start = new System.Windows.Forms.Button();
             this.btn_stop = new System.Windows.Forms.Button();
             this.btn_test_data = new System.Windows.Forms.Button();
@@ -42,6 +42,7 @@
             this.panel_table = new System.Windows.Forms.Panel();
             this.panel_chart = new System.Windows.Forms.Panel();
             this.panel_controls = new System.Windows.Forms.Panel();
+            this.btnPreprocess = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.chart_noise1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.dgv_test_data)).BeginInit();
             this.panel_main.SuspendLayout();
@@ -91,19 +92,18 @@
             // 
             // chart_noise1
             // 
-            chartArea6.Name = "ChartArea1";
-            this.chart_noise1.ChartAreas.Add(chartArea6);
-            this.chart_noise1.Dock = System.Windows.Forms.DockStyle.Fill;
-            legend6.Name = "Legend1";
-            this.chart_noise1.Legends.Add(legend6);
+            chartArea2.Name = "ChartArea1";
+            this.chart_noise1.ChartAreas.Add(chartArea2);
+            legend2.Name = "Legend1";
+            this.chart_noise1.Legends.Add(legend2);
             this.chart_noise1.Location = new System.Drawing.Point(8, 8);
             this.chart_noise1.Margin = new System.Windows.Forms.Padding(8);
             this.chart_noise1.Name = "chart_noise1";
-            series6.ChartArea = "ChartArea1";
-            series6.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Line;
-            series6.Legend = "Legend1";
-            series6.Name = "Noise Level (dB)";
-            this.chart_noise1.Series.Add(series6);
+            series2.ChartArea = "ChartArea1";
+            series2.ChartType = System.Windows.Forms.DataVisualization.Charting.SeriesChartType.Line;
+            series2.Legend = "Legend1";
+            series2.Name = "Noise Level (dB)";
+            this.chart_noise1.Series.Add(series2);
             this.chart_noise1.Size = new System.Drawing.Size(434, 677);
             this.chart_noise1.TabIndex = 275;
             this.chart_noise1.Text = "Noise Level Chart";
@@ -190,6 +190,7 @@
             // panel_controls
             // 
             this.panel_controls.BackColor = System.Drawing.Color.LightGray;
+            this.panel_controls.Controls.Add(this.btnPreprocess);
             this.panel_controls.Controls.Add(this.btn_start);
             this.panel_controls.Controls.Add(this.btn_stop);
             this.panel_controls.Controls.Add(this.btn_test_data);
@@ -199,6 +200,19 @@
             this.panel_controls.Name = "panel_controls";
             this.panel_controls.Size = new System.Drawing.Size(1446, 73);
             this.panel_controls.TabIndex = 280;
+            // 
+            // btnPreprocess
+            // 
+            this.btnPreprocess.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Bold);
+            this.btnPreprocess.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
+            this.btnPreprocess.Location = new System.Drawing.Point(402, 16);
+            this.btnPreprocess.Margin = new System.Windows.Forms.Padding(2);
+            this.btnPreprocess.Name = "btnPreprocess";
+            this.btnPreprocess.Size = new System.Drawing.Size(114, 43);
+            this.btnPreprocess.TabIndex = 275;
+            this.btnPreprocess.Text = "preprocess data";
+            this.btnPreprocess.UseVisualStyleBackColor = true;
+            //this.btnPreprocess.Click += new System.EventHandler(this.btnPreprocess_Click);
             // 
             // Demo
             // 
@@ -235,5 +249,6 @@
         private System.Windows.Forms.Panel panel_controls;
         private System.Windows.Forms.Panel panel_chart;
         private System.Windows.Forms.Panel panel_table;
+        private System.Windows.Forms.Button btnPreprocess;
     }
 }

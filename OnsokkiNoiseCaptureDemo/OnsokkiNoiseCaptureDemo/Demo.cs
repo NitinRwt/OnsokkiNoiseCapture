@@ -28,7 +28,8 @@ namespace OnsokkiNoiseCaptureDemo
             InitializeComponent();
             StartConsoleApp();
             InitializeTestDataTable();
-            LoadTestCounter(); // Load existing counter from file
+            LoadTestCounter();
+            AddPreprocessButton();
         }
 
         public static string onsokkiFilePath = @"C:\FAPLData\OnsokkiData";
@@ -258,6 +259,24 @@ namespace OnsokkiNoiseCaptureDemo
                 update_debug_message("Exception:" + exp.Message);
             }
         }
+        private void GenerateSimplePDF(string csvPath, string pdfPath)
+        {
+            try
+            {
+                var lines = File.ReadAllLines(csvPath);
+                using (var writer = new StreamWriter(pdfPath))
+                {
+                    writer.WriteLine("Processed Report PDF View");
+                    writer.WriteLine(new string('=', 30));
+                    foreach (var line in lines)
+                        writer.WriteLine(line);
+                }
+            }
+            catch (Exception ex)
+            {
+                update_debug_message("Failed to generate PDF: " + ex.Message);
+            }
+        }
 
         private void GenerateReportWithTable(string fileName, double maxNoise, double avgNoise)
         {
@@ -379,34 +398,15 @@ namespace OnsokkiNoiseCaptureDemo
 
         private string GetLatestCSVFile(string directory)
         {
-            try
-            {
-                if (!Directory.Exists(directory))
-                {
-                    update_debug_message($"Directory does not exist: {directory}");
-                    return null;
-                }
+            if (!Directory.Exists(directory)) return null;
+            var files = new DirectoryInfo(directory).GetFiles("*.csv");
+            if (files.Length == 0) return null;
+            return files.OrderByDescending(f => f.LastWriteTime).First().FullName;
+        }
 
-                DirectoryInfo dirInfo = new DirectoryInfo(directory);
-                FileInfo[] csvFiles = dirInfo.GetFiles("*.csv");
-
-                if (csvFiles.Length == 0)
-                {
-                    update_debug_message($"No CSV files found in directory: {directory}");
-                    return null;
-                }
-
-                // Sort by last write time (most recent first)
-                FileInfo latestFile = csvFiles.OrderByDescending(f => f.LastWriteTime).First();
-
-                update_debug_message($"Latest CSV file found: {latestFile.Name} - {latestFile.LastWriteTime}");
-                return latestFile.FullName;
-            }
-            catch (Exception ex)
-            {
-                update_debug_message($"Error getting latest CSV file: {ex.Message}");
-                return null;
-            }
+        public void update_debug_message(string message)
+        {
+            debugFile.logDebug(message);
         }
 
         private void WriteGraphData(StreamWriter writer)
@@ -665,53 +665,11 @@ namespace OnsokkiNoiseCaptureDemo
                 }
             }
         }
-
-        private string[] ParseCSVLine(string line)
-        {
-            List<string> result = new List<string>();
-            bool inQuotes = false;
-            StringBuilder currentField = new StringBuilder();
-
-            for (int i = 0; i < line.Length; i++)
-            {
-                char c = line[i];
-
-                if (c == '"')
-                {
-                    if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
-                    {
-                        currentField.Append('"');
-                        i++; // Skip next quote
-                    }
-                    else
-                    {
-                        inQuotes = !inQuotes;
-                    }
-                }
-                else if (c == ',' && !inQuotes)
-                {
-                    result.Add(currentField.ToString());
-                    currentField.Clear();
-                }
-                else
-                {
-                    currentField.Append(c);
-                }
-            }
-
-            result.Add(currentField.ToString());
-            return result.ToArray();
-        }
-
-        public void update_debug_message(string message)
-        {
-            debugFile.logDebug(message);
-        }
-
         private void Demo_Load(object sender, EventArgs e)
         {
-            debugFile = new FAPL_Debug_FileWrite();
-            update_debug_message("SW version:" + SW_VER);
+            // Add initialization logic here if needed
+            InitializeTestDataTable();
+            LoadTestCounter();
         }
 
         public (List<double> ch1timeList, List<double> ch1List,
@@ -784,5 +742,87 @@ namespace OnsokkiNoiseCaptureDemo
             // Example: Show a message box or perform any action you want
             MessageBox.Show("Test Parameters label clicked.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
+    
+        private Button btn_preprocess;
+
+        private void AddPreprocessButton()
+        {
+            btn_preprocess = new Button();
+            btn_preprocess.Text = "Preprocess Data";
+            btn_preprocess.Size = new Size(140, 40);
+            btn_preprocess.Location = new Point(850, 100); // Adjust as needed
+            btn_preprocess.Click += new EventHandler(btn_preprocess_Click);
+            this.Controls.Add(btn_preprocess);
+        }
+        private void btn_preprocess_Click(object sender, EventArgs e)
+        {
+            string latestCSV = GetLatestCSVFile(destinationDirectory);
+            if (string.IsNullOrEmpty(latestCSV))
+            {
+                MessageBox.Show("No CSV found in final_report folder.");
+                return;
+            }
+
+            string[] lines;
+            try
+            {
+                lines = File.ReadAllLines(latestCSV);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error reading CSV: {ex.Message}");
+                return;
+            }
+
+            if (lines.Length < 2)
+            {
+                MessageBox.Show("CSV has no data rows.");
+                return;
+            }
+
+            string[] headers = lines[0].Split(',');
+            var dataRows = lines.Skip(1)
+                                .Where(l => !string.IsNullOrWhiteSpace(l))
+                                .Select(l => l.Split(','))
+                                .ToList();
+
+            int freqCols = Math.Min(5, headers.Length);
+            double[] sums = new double[freqCols];
+            int rowCount = dataRows.Count;
+
+            foreach (var row in dataRows)
+            {
+                for (int i = 0; i < freqCols; i++)
+                {
+                    if (double.TryParse(row[i], out double val))
+                        sums[i] += val;
+                }
+            }
+
+            if (rowCount == 0)
+            {
+                MessageBox.Show("No data to process.");
+                return;
+            }
+
+            double[] avgs = sums.Select(sum => sum / rowCount).ToArray();
+            string newRow = string.Join(",", avgs.Select(a => a.ToString("F2")));
+
+            var updatedLines = new List<string> { lines[0] };
+            updatedLines.AddRange(lines.Skip(1));
+            updatedLines.Add(newRow);
+
+            string processedDir = Path.Combine(destinationDirectory, "processed_report");
+            Directory.CreateDirectory(processedDir);
+
+            string updatedCSVPath = Path.Combine(processedDir, "Processed_" + Path.GetFileName(latestCSV));
+            File.WriteAllLines(updatedCSVPath, updatedLines);
+
+            string pdfPath = Path.ChangeExtension(updatedCSVPath, ".pdf");
+            GenerateSimplePDF(updatedCSVPath, pdfPath);
+
+            MessageBox.Show($"Data preprocessed and saved:\nCSV: {updatedCSVPath}\nPDF: {pdfPath}");
+        }
+
     }
 }
