@@ -39,9 +39,9 @@ namespace OnsokkiNoiseCaptureDemo
         public static string destinationDirectory = @"C:\FAPLData\final_report";
         public static string rawDataDirectory = @"C:\FAPLData\OnsokkiData\raw";
         private static string testCounterFilePath = @"C:\FAPLData\OnsokkiData\TestCounter.txt";
-
         FAPL_Debug_FileWrite debugFile;
         public const ushort SW_VER = 1;
+        public static string processedDataDirectory = @"C:\FAPLData\processed_data";
         private void btn_preprocess_Click(object sender, EventArgs e)
         {
             try
@@ -69,25 +69,63 @@ namespace OnsokkiNoiseCaptureDemo
                     return;
                 }
 
-                // Process frequency values (skip header row)
-                var ch1Values = new List<double>();
-                var ch2Values = new List<double>();
+                // Lists for batch averages
+                List<double> ch1BatchAverages = new List<double>();
+                List<double> ch2BatchAverages = new List<double>();
+                List<int> batchSizes = new List<int>();
 
-                for (int i = frequencyHeaderIndex + 1; i < lines.Count && ch1Values.Count < 5; i++)
+                // Process frequency values in batches of 5
+                List<double> currentCh1Batch = new List<double>();
+                List<double> currentCh2Batch = new List<double>();
+
+                // Start processing from the row after the header
+                for (int i = frequencyHeaderIndex + 1; i < lines.Count; i++)
                 {
                     string[] parts = lines[i].Split(',');
 
+                    // Check if this line contains valid frequency data
                     if (parts.Length >= 3 &&
                         double.TryParse(parts[1], out double ch1Value) &&
                         double.TryParse(parts[2], out double ch2Value))
                     {
-                        ch1Values.Add(ch1Value);
-                        ch2Values.Add(ch2Value);
+                        // Add values to current batch
+                        currentCh1Batch.Add(ch1Value);
+                        currentCh2Batch.Add(ch2Value);
                         update_debug_message($"Frequency: {parts[0]}, CH1: {ch1Value}, CH2: {ch2Value}");
+
+                        // When batch is complete (5 values), calculate average and prepare for next batch
+                        if (currentCh1Batch.Count == 5)
+                        {
+                            double ch1Average = Math.Round(currentCh1Batch.Average(), 2);
+                            double ch2Average = Math.Round(currentCh2Batch.Average(), 2);
+
+                            ch1BatchAverages.Add(ch1Average);
+                            ch2BatchAverages.Add(ch2Average);
+                            batchSizes.Add(currentCh1Batch.Count);
+
+                            update_debug_message($"Batch {ch1BatchAverages.Count} - CH1 Avg: {ch1Average}, CH2 Avg: {ch2Average}");
+
+                            // Clear for next batch
+                            currentCh1Batch.Clear();
+                            currentCh2Batch.Clear();
+                        }
                     }
                 }
 
-                if (ch1Values.Count == 0)
+                // Process any remaining values (if not a multiple of 5)
+                if (currentCh1Batch.Count > 0)
+                {
+                    double ch1Average = Math.Round(currentCh1Batch.Average(), 2);
+                    double ch2Average = Math.Round(currentCh2Batch.Average(), 2);
+
+                    ch1BatchAverages.Add(ch1Average);
+                    ch2BatchAverages.Add(ch2Average);
+                    batchSizes.Add(currentCh1Batch.Count);
+
+                    update_debug_message($"Final batch ({currentCh1Batch.Count} values) - CH1 Avg: {ch1Average}, CH2 Avg: {ch2Average}");
+                }
+
+                if (ch1BatchAverages.Count == 0)
                 {
                     update_debug_message("No valid frequency data found.");
                     MessageBox.Show("No valid frequency data found in CSV.", "Preprocessing Error",
@@ -95,28 +133,44 @@ namespace OnsokkiNoiseCaptureDemo
                     return;
                 }
 
-                // Calculate averages
-                double ch1Average = Math.Round(ch1Values.Average(), 2);
-                double ch2Average = Math.Round(ch2Values.Average(), 2);
+                // Calculate overall averages
+                double overallCh1Average = Math.Round(ch1BatchAverages.Average(), 2);
+                double overallCh2Average = Math.Round(ch2BatchAverages.Average(), 2);
 
                 // Add results to the CSV
                 lines.Add("");
                 lines.Add("Preprocessing Results");
-                lines.Add($"CH_001-P. Ave. Average (First {ch1Values.Count} values),{ch1Average}");
-                lines.Add($"CH_002-P. Ave. Average (First {ch2Values.Count} values),{ch2Average}");
+                lines.Add($"Overall CH_001-P. Ave. Average,{overallCh1Average}");
+                lines.Add($"Overall CH_002-P. Ave. Average,{overallCh2Average}");
+                lines.Add("");
+                lines.Add("Batch Processing Results (5 values per batch)");
 
-                // Save updated CSV
+                for (int i = 0; i < ch1BatchAverages.Count; i++)
+                {
+                    lines.Add($"Batch {i + 1} ({batchSizes[i]} values) - CH_001-P. Ave.,{ch1BatchAverages[i]}");
+                    lines.Add($"Batch {i + 1} ({batchSizes[i]} values) - CH_002-P. Ave.,{ch2BatchAverages[i]}");
+                }
+
+                // Ensure processed data directory exists
+                Directory.CreateDirectory(processedDataDirectory);
                 string processedCsv = Path.Combine(
-                    Path.GetDirectoryName(latestCsv),
+                    processedDataDirectory,
                     Path.GetFileNameWithoutExtension(latestCsv) + "_processed.csv"
                 );
                 File.WriteAllLines(processedCsv, lines);
 
-                // Generate PDF for the processed CSV
-                GenerateSimplePDF(processedCsv, ch1Average, ch2Average);
+                // Pass all batch data to PDF generation
+                GenerateDetailedPDF(processedCsv, ch1BatchAverages, ch2BatchAverages, batchSizes, overallCh1Average, overallCh2Average);
 
-                update_debug_message($"Preprocessing complete. CH1 Avg: {ch1Average}, CH2 Avg: {ch2Average}");
-                MessageBox.Show($"Preprocessing complete!\n\nCH_001-P. Ave. Average: {ch1Average}\nCH_002-P. Ave. Average: {ch2Average}",
+                update_debug_message($"Preprocessing complete. Overall CH1 Avg: {overallCh1Average}, CH2 Avg: {overallCh2Average}");
+                update_debug_message($"Processed {ch1BatchAverages.Count} batches of frequency data");
+                update_debug_message($"Processed files saved to: {processedDataDirectory}");
+
+                MessageBox.Show($"Preprocessing complete!\n\n" +
+                               $"Overall CH_001-P. Ave. Average: {overallCh1Average}\n" +
+                               $"Overall CH_002-P. Ave. Average: {overallCh2Average}\n" +
+                               $"Processed {ch1BatchAverages.Count} batches of data\n\n" +
+                               $"Files saved to: {processedDataDirectory}",
                                "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -126,7 +180,8 @@ namespace OnsokkiNoiseCaptureDemo
                                MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-        private void GenerateSimplePDF(string csvPath, double ch1Average, double ch2Average)
+        private void GenerateDetailedPDF(string csvPath, List<double> ch1Averages, List<double> ch2Averages,
+                                       List<int> batchSizes, double overallCh1Average, double overallCh2Average)
         {
             string pdfPath = Path.ChangeExtension(csvPath, ".pdf");
 
@@ -151,35 +206,62 @@ namespace OnsokkiNoiseCaptureDemo
                     title.SpacingAfter = 20f;
                     doc.Add(title);
 
-                    // Add analysis results
-                    Paragraph results = new Paragraph("Analysis Results:", headerFont);
+                    // Add overall analysis results
+                    Paragraph results = new Paragraph("Overall Analysis Results:", headerFont);
                     results.SpacingAfter = 10f;
                     doc.Add(results);
 
-                    PdfPTable table = new PdfPTable(2);
-                    table.WidthPercentage = 80;
-                    table.HorizontalAlignment = Element.ALIGN_CENTER;
-                    table.SpacingAfter = 20f;
+                    PdfPTable overallTable = new PdfPTable(2);
+                    overallTable.WidthPercentage = 80;
+                    overallTable.HorizontalAlignment = Element.ALIGN_CENTER;
+                    overallTable.SpacingAfter = 20f;
 
                     // Add table headers
-                    table.AddCell(new Phrase("Channel", headerFont));
-                    table.AddCell(new Phrase("Average Value", headerFont));
+                    overallTable.AddCell(new Phrase("Channel", headerFont));
+                    overallTable.AddCell(new Phrase("Overall Average Value", headerFont));
 
                     // Add data
-                    table.AddCell(new Phrase("CH_001-P. Ave.", normalFont));
-                    table.AddCell(new Phrase(ch1Average.ToString("F2"), normalFont));
+                    overallTable.AddCell(new Phrase("CH_001-P. Ave.", normalFont));
+                    overallTable.AddCell(new Phrase(overallCh1Average.ToString("F2"), normalFont));
 
-                    table.AddCell(new Phrase("CH_002-P. Ave.", normalFont));
-                    table.AddCell(new Phrase(ch2Average.ToString("F2"), normalFont));
+                    overallTable.AddCell(new Phrase("CH_002-P. Ave.", normalFont));
+                    overallTable.AddCell(new Phrase(overallCh2Average.ToString("F2"), normalFont));
 
-                    doc.Add(table);
+                    doc.Add(overallTable);
 
-                    // Add CSV data
+                    // Add batch analysis results
+                    Paragraph batchResults = new Paragraph("Batch Analysis Results:", headerFont);
+                    batchResults.SpacingAfter = 10f;
+                    batchResults.SpacingBefore = 10f;
+                    doc.Add(batchResults);
+
+                    PdfPTable batchTable = new PdfPTable(3);
+                    batchTable.WidthPercentage = 90;
+                    batchTable.HorizontalAlignment = Element.ALIGN_CENTER;
+                    batchTable.SpacingAfter = 20f;
+
+                    // Add table headers
+                    batchTable.AddCell(new Phrase("Batch", headerFont));
+                    batchTable.AddCell(new Phrase("CH_001-P. Ave. Average", headerFont));
+                    batchTable.AddCell(new Phrase("CH_002-P. Ave. Average", headerFont));
+
+                    // Add batch data
+                    for (int i = 0; i < ch1Averages.Count; i++)
+                    {
+                        batchTable.AddCell(new Phrase($"Batch {i + 1} ({batchSizes[i]} values)", normalFont));
+                        batchTable.AddCell(new Phrase(ch1Averages[i].ToString("F2"), normalFont));
+                        batchTable.AddCell(new Phrase(ch2Averages[i].ToString("F2"), normalFont));
+                    }
+
+                    doc.Add(batchTable);
+
+                    // Add CSV data header
                     Paragraph csvHeader = new Paragraph("CSV Data (First 10 Rows):", headerFont);
                     csvHeader.SpacingBefore = 10f;
                     csvHeader.SpacingAfter = 10f;
                     doc.Add(csvHeader);
 
+                    // Add sample of CSV data
                     string[] csvLines = File.ReadAllLines(csvPath);
                     int lineCount = Math.Min(csvLines.Length, 11); // Header + 10 rows
 
@@ -190,14 +272,15 @@ namespace OnsokkiNoiseCaptureDemo
                     }
 
                     doc.Close();
-                    update_debug_message($"Generated PDF: {pdfPath}");
+                    update_debug_message($"Generated detailed PDF: {pdfPath}");
                 }
             }
             catch (Exception ex)
             {
-                update_debug_message($"Error generating PDF: {ex.Message}");
+                update_debug_message($"Error generating detailed PDF: {ex.Message}");
             }
         }
+        
         private void LoadTestCounter()
         {
             try
@@ -274,20 +357,20 @@ namespace OnsokkiNoiseCaptureDemo
             string[] defaultValues = {
                 "(Auto Generated) Starting of the reporting software",
                 "006B20250522001 (Auto Generated)",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San",
-                "Initially to be filled by Daikin San"
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin ",
+                "Initially to be filled by Daikin "
             };
 
             for (int i = 0; i < parameters.Length; i++)
@@ -297,21 +380,21 @@ namespace OnsokkiNoiseCaptureDemo
 
             // Add second table data
             dgv_test_data.Rows.Add("End Time", "(Auto Generated) csv import time");
-            dgv_test_data.Rows.Add("Serial No.", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Application", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Standard", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Test Engineer", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Power Supply", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Rated Power(Cool/Heat) (W)", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Rated Current(A)", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Refrigerant Type / QTY", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("IDU Fan Motor / Rated RPM", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("ODU Fan Motor / Rated RPM", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Sample No.", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Sound Jacket", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Outdoor Unit Rated Sound Level dB(A)", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("O.D Air W.B.T", "Initially to be filled by Daikin San");
-            dgv_test_data.Rows.Add("Outdoor Unit Measurement Channel", "Initially to be filled by Daikin San");
+            dgv_test_data.Rows.Add("Serial No.", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Application", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Standard", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Test Engineer", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Power Supply", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Rated Power(Cool/Heat) (W)", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Rated Current(A)", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Refrigerant Type / QTY", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("IDU Fan Motor / Rated RPM", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("ODU Fan Motor / Rated RPM", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Sample No.", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Sound Jacket", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Outdoor Unit Rated Sound Level dB(A)", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("O.D Air W.B.T", "Initially to be filled by Daikin ");
+            dgv_test_data.Rows.Add("Outdoor Unit Measurement Channel", "Initially to be filled by Daikin ");
         }
 
         private void StartConsoleApp()
@@ -331,14 +414,42 @@ namespace OnsokkiNoiseCaptureDemo
                 Console.WriteLine($"Error starting ConsoleApp1: {exp.Message}");
             }
         }
+        public static class TestIdGenerator
+        {
+            private static readonly string filePath = "last_test_id.txt";
 
-        private void btn_start_Click(object sender, EventArgs e)
+            public static string Generate(string labCode = "006")
+            {
+                string today = DateTime.Now.ToString("yyyyMMdd");
+                int serial = 1;
+
+                if (File.Exists(filePath))
+                {
+                    string[] parts = File.ReadAllText(filePath).Split(',');
+                    string lastDate = parts[0];
+                    int lastSerial = int.Parse(parts[1]);
+
+                    if (lastDate == today)
+                        serial = lastSerial + 1;
+                }
+
+                // Pad serial to 3 digits: 001, 002...
+                string serialStr = serial.ToString("D3");
+
+                // Save updated serial
+                File.WriteAllText(filePath, $"{today},{serialStr}");
+
+                // Final format
+                return $"{labCode}{today}{serialStr}";
+            }
+        }
+
+        private async void btn_start_Click(object sender, EventArgs e)
         {
             testStartTime = DateTime.Now;
             isTestRunning = true;
 
-            // Generate new Test ID
-            string newTestID = GenerateTestID();
+            string newTestID = TestIdGenerator.Generate();
 
             // Update the Started Time and Test ID in the table
             dgv_test_data.Rows[0].Cells["Value"].Value = testStartTime.ToString("yyyy-MM-dd HH:mm:ss");
@@ -351,6 +462,50 @@ namespace OnsokkiNoiseCaptureDemo
             update_debug_message($"Test started at: {testStartTime}");
             update_debug_message($"Test ID generated: {newTestID}");
             OnosokkiControl.updateOnosokkiStart();
+
+            // 🔻 NEW: run full auto sequence
+            await RunAutoTestSequenceAsync();
+        }
+        private async Task RunAutoTestSequenceAsync()
+        {
+            try
+            {
+                // Disable buttons so user doesn't spam things during the auto run
+                btn_start.Enabled = false;
+                btn_stop.Enabled = false;
+                btn_test_data.Enabled = false;
+
+                update_debug_message("Auto test sequence started: waiting 10 seconds before stopping.");
+
+                // 1) Wait 10 seconds for the measurement
+                await Task.Delay(TimeSpan.FromSeconds(10));
+
+                btn_stop_Click(null, EventArgs.Empty);
+
+                await Task.Delay(TimeSpan.FromSeconds(2));
+                update_debug_message("Attempting to read latest file and generate reports.");
+
+                btn_test_data_Click(null, EventArgs.Empty);
+
+                update_debug_message("Auto test sequence completed successfully.");
+            }
+            catch (Exception ex)
+            {
+                update_debug_message("Auto test sequence error: " + ex.Message);
+                MessageBox.Show($"Auto test failed: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                // Re-enable buttons
+                btn_start.Enabled = true;
+                btn_stop.Enabled = true;
+                btn_test_data.Enabled = true;
+
+                // Reset button colors if you want
+                btn_start.BackColor = SystemColors.Control;
+                btn_stop.BackColor = SystemColors.Control;
+            }
         }
 
         private void btn_stop_Click(object sender, EventArgs e)
@@ -451,9 +606,9 @@ namespace OnsokkiNoiseCaptureDemo
         {
             using (StreamWriter writer = new StreamWriter(csvPath))
             {
-                // Write the header as per the image format
+                
                 writer.WriteLine("DAIKIN,,Test Data (Anechoic Chamber)");
-                writer.WriteLine(""); // Empty line
+                writer.WriteLine(""); 
 
                 // Write test parameters in the side-by-side format
                 WriteTestParametersTable(writer);
@@ -743,6 +898,11 @@ namespace OnsokkiNoiseCaptureDemo
         {
             // Example: Show a message box or perform any action you want
             MessageBox.Show("Test Parameters label clicked.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void panel_table_Paint(object sender, PaintEventArgs e)
+        {
+
         }
     }
 }

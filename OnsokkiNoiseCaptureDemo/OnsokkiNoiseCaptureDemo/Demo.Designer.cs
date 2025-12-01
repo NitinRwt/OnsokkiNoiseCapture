@@ -86,7 +86,7 @@ namespace OnsokkiNoiseCaptureDemo
             this.btn_test_data.Location = new System.Drawing.Point(270, 16);
             this.btn_test_data.Margin = new System.Windows.Forms.Padding(2);
             this.btn_test_data.Name = "btn_test_data";
-            this.btn_test_data.Size = new System.Drawing.Size(114, 43);
+            this.btn_test_data.Size = new System.Drawing.Size(145, 43);
             this.btn_test_data.TabIndex = 274;
             this.btn_test_data.Text = "Fetch Data & Generate Report";
             this.btn_test_data.UseVisualStyleBackColor = true;
@@ -106,7 +106,7 @@ namespace OnsokkiNoiseCaptureDemo
             series2.Legend = "Legend1";
             series2.Name = "Noise Level (dB)";
             this.chart_noise1.Series.Add(series2);
-            this.chart_noise1.Size = new System.Drawing.Size(434, 677);
+            this.chart_noise1.Size = new System.Drawing.Size(537, 677);
             this.chart_noise1.TabIndex = 275;
             this.chart_noise1.Text = "Noise Level Chart";
             // 
@@ -115,10 +115,10 @@ namespace OnsokkiNoiseCaptureDemo
             this.lbl_noise.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.lbl_noise.Font = new System.Drawing.Font("Microsoft Sans Serif", 14F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.lbl_noise.ForeColor = System.Drawing.Color.DarkBlue;
-            this.lbl_noise.Location = new System.Drawing.Point(8, 685);
+            this.lbl_noise.Location = new System.Drawing.Point(8, 817);
             this.lbl_noise.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.lbl_noise.Name = "lbl_noise";
-            this.lbl_noise.Size = new System.Drawing.Size(434, 32);
+            this.lbl_noise.Size = new System.Drawing.Size(537, 32);
             this.lbl_noise.TabIndex = 276;
             this.lbl_noise.Text = "Noise Value: --";
             this.lbl_noise.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -135,7 +135,7 @@ namespace OnsokkiNoiseCaptureDemo
             this.dgv_test_data.Name = "dgv_test_data";
             this.dgv_test_data.RowHeadersWidth = 51;
             this.dgv_test_data.RowTemplate.Height = 24;
-            this.dgv_test_data.Size = new System.Drawing.Size(978, 653);
+            this.dgv_test_data.Size = new System.Drawing.Size(871, 814);
             this.dgv_test_data.TabIndex = 277;
             // 
             // lbl_test_parameters
@@ -147,7 +147,7 @@ namespace OnsokkiNoiseCaptureDemo
             this.lbl_test_parameters.Location = new System.Drawing.Point(8, 8);
             this.lbl_test_parameters.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.lbl_test_parameters.Name = "lbl_test_parameters";
-            this.lbl_test_parameters.Size = new System.Drawing.Size(980, 24);
+            this.lbl_test_parameters.Size = new System.Drawing.Size(871, 24);
             this.lbl_test_parameters.TabIndex = 278;
             this.lbl_test_parameters.Text = "Test Parameters";
             this.lbl_test_parameters.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
@@ -162,31 +162,31 @@ namespace OnsokkiNoiseCaptureDemo
             this.panel_main.Location = new System.Drawing.Point(0, 0);
             this.panel_main.Margin = new System.Windows.Forms.Padding(2);
             this.panel_main.Name = "panel_main";
-            this.panel_main.Size = new System.Drawing.Size(1446, 798);
+            this.panel_main.Size = new System.Drawing.Size(1446, 930);
             this.panel_main.TabIndex = 279;
             // 
             // panel_table
             // 
             this.panel_table.Controls.Add(this.dgv_test_data);
             this.panel_table.Controls.Add(this.lbl_test_parameters);
-            this.panel_table.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel_table.Location = new System.Drawing.Point(0, 73);
             this.panel_table.Margin = new System.Windows.Forms.Padding(2);
             this.panel_table.Name = "panel_table";
             this.panel_table.Padding = new System.Windows.Forms.Padding(8);
-            this.panel_table.Size = new System.Drawing.Size(996, 725);
+            this.panel_table.Size = new System.Drawing.Size(889, 857);
             this.panel_table.TabIndex = 282;
+            this.panel_table.Paint += new System.Windows.Forms.PaintEventHandler(this.panel_table_Paint);
             // 
             // panel_chart
             // 
             this.panel_chart.Controls.Add(this.chart_noise1);
             this.panel_chart.Controls.Add(this.lbl_noise);
             this.panel_chart.Dock = System.Windows.Forms.DockStyle.Right;
-            this.panel_chart.Location = new System.Drawing.Point(996, 73);
+            this.panel_chart.Location = new System.Drawing.Point(893, 73);
             this.panel_chart.Margin = new System.Windows.Forms.Padding(2);
             this.panel_chart.Name = "panel_chart";
             this.panel_chart.Padding = new System.Windows.Forms.Padding(8);
-            this.panel_chart.Size = new System.Drawing.Size(450, 725);
+            this.panel_chart.Size = new System.Drawing.Size(553, 857);
             this.panel_chart.TabIndex = 281;
             // 
             // panel_controls
@@ -207,26 +207,25 @@ namespace OnsokkiNoiseCaptureDemo
             // 
             this.btnPreprocess.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Bold);
             this.btnPreprocess.ForeColor = System.Drawing.SystemColors.ActiveCaptionText;
-            this.btnPreprocess.Location = new System.Drawing.Point(402, 16);
+            this.btnPreprocess.Location = new System.Drawing.Point(433, 16);
             this.btnPreprocess.Margin = new System.Windows.Forms.Padding(2);
             this.btnPreprocess.Name = "btnPreprocess";
             this.btnPreprocess.Size = new System.Drawing.Size(114, 43);
             this.btnPreprocess.TabIndex = 275;
             this.btnPreprocess.Text = "preprocess data";
             this.btnPreprocess.UseVisualStyleBackColor = true;
-            this.btnPreprocess.Click += new EventHandler(this.btn_preprocess_Click);
+            this.btnPreprocess.Click += new System.EventHandler(this.btn_preprocess_Click);
             // 
             // Demo
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1446, 798);
+            this.ClientSize = new System.Drawing.Size(1446, 930);
             this.Controls.Add(this.panel_main);
             this.Margin = new System.Windows.Forms.Padding(2);
             this.MinimumSize = new System.Drawing.Size(754, 495);
             this.Name = "Demo";
             this.Text = "Onsokki Noise Capture Demo - Test Data Management";
-            this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.Load += new System.EventHandler(this.Demo_Load);
             ((System.ComponentModel.ISupportInitialize)(this.chart_noise1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.dgv_test_data)).EndInit();
